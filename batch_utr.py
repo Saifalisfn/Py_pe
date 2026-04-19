@@ -112,7 +112,12 @@ def print_results(results):
     return results
 
 
-def save_results(results):
+def save_results(results, auto_filename=None):
+    if auto_filename:
+        from export import export_utr_results
+        path = export_utr_results(results, filename=auto_filename)
+        console.print(f"[green]Saved: {path}[/green]")
+        return
     answer = console.input("\n[bold white]Export to Excel? (y/n): [/bold white]").strip().lower()
     if answer == "y":
         from export import export_utr_results
@@ -121,13 +126,22 @@ def save_results(results):
 
 
 if __name__ == "__main__":
-    utrs = load_utrs(sys.argv[1:])
+    args = sys.argv[1:]
+    input_file = args[0] if len(args) == 1 and os.path.isfile(args[0]) else None
+
+    utrs = load_utrs(args)
     if not utrs:
         console.print("[red]No UTRs provided.[/red]")
         sys.exit(1)
 
     results = run_batch(utrs)
     print_results(results)
-    save_results(results)
+
+    # Auto-export with matching name when input is a file
+    if input_file:
+        base = os.path.splitext(input_file)[0]
+        save_results(results, auto_filename=f"{base}_results.xlsx")
+    else:
+        save_results(results)
 
     db.close()
