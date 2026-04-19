@@ -1,5 +1,6 @@
 import mysql.connector
 import json
+import threading
 from mysql.connector import Error
 import os
 from dotenv import load_dotenv
@@ -8,6 +9,7 @@ load_dotenv()
 
 class Database:
     def __init__(self):
+        self._lock = threading.Lock()
         self.config = {
             'host': os.getenv('DB_HOST', 'localhost'),
             'port': int(os.getenv('DB_PORT', 3306)),
@@ -17,8 +19,7 @@ class Database:
             'charset': 'utf8mb4',
             'collation': 'utf8mb4_unicode_ci',
             'autocommit': True,
-            'pool_name': 'bharatpe_pool',
-            'pool_size': int(os.getenv('DB_POOL_SIZE', 5))
+            'connection_timeout': 10
         }
         self.conn = None
         self.cursor = None
@@ -37,29 +38,42 @@ class Database:
     def reconnect(self):
         """Reconnect if connection lost"""
         try:
-            self.conn.ping(reconnect=True, attempts=3, delay=5)
+            self.conn.ping(reconnect=True, attempts=2, delay=1)
         except:
             self.connect()
     
     def execute(self, query, params=None):
         """Execute query"""
-        try:
-            self.reconnect()
-            self.cursor.execute(query, params)
-            return self.cursor
-        except Error as e:
-            print(f"[DB Error] {e}")
-            raise
+        with self._lock:
+            try:
+                self.reconnect()
+                self.cursor.execute(query, params)
+                return self.cursor
+            except Error as e:
+                print(f"[DB Error] {e}")
+                raise
     
     def fetchone(self, query, params=None):
         """Fetch single row"""
-        self.execute(query, params)
-        return self.cursor.fetchone()
-    
+        with self._lock:
+            try:
+                self.reconnect()
+                self.cursor.execute(query, params)
+                return self.cursor.fetchone()
+            except Error as e:
+                print(f"[DB Error] {e}")
+                raise
+
     def fetchall(self, query, params=None):
         """Fetch all rows"""
-        self.execute(query, params)
-        return self.cursor.fetchall()
+        with self._lock:
+            try:
+                self.reconnect()
+                self.cursor.execute(query, params)
+                return self.cursor.fetchall()
+            except Error as e:
+                print(f"[DB Error] {e}")
+                raise
     
     def commit(self):
         """Commit transaction"""
